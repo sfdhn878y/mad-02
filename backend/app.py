@@ -136,6 +136,7 @@ class Job(db.Model):
 
     # Relationships
     company = db.relationship("CompanyProfile", back_populates="jobs")
+    is_close = db.Column(db.Boolean, default=False)
 
     applications = db.relationship(
         "Application",
@@ -315,6 +316,116 @@ def get_company_profie():
 
 
 
+# job post route 
+@app.route("/company/post_job", methods=["POST"])
+@jwt_required()
+def post_job():
+    print('post jobs hit ')
+    user_id = get_jwt_identity()
+
+    # get company profile of logged in user
+    company = CompanyProfile.query.filter_by(user_id=user_id).first()
+
+    if not company:
+        return jsonify({"message": "Company profile not found"}), 404
+
+    data = request.get_json()
+
+    new_job = Job(
+        company_id=company.id,
+        title=data.get("title"),
+        description=data.get("description"),
+        skills=data.get("skills"),
+        experience=data.get("experience"),
+        salary=data.get("salary"),
+        benefits=data.get("benefits"),
+        location=data.get("location"),
+        job_type=data.get("job_type"),
+    )
+
+    db.session.add(new_job)
+    db.session.commit()
+
+    return jsonify({"message": "Job posted successfully"})
+
+@app.route("/company/my_jobs", methods=["GET"])
+@jwt_required()
+def get_my_jobs():
+    user_id = get_jwt_identity() #2
+
+    company = CompanyProfile.query.filter_by(user_id=user_id).first()
+
+    if not company:
+        return jsonify({"message": "Company not found"}), 404
+
+    jobs = Job.query.filter_by(company_id=company.id).all()
+
+    job_list = []
+
+    for job in jobs:
+        job_list.append({
+            "id": job.id,
+            "title": job.title,
+            "description": job.description,
+            "skills": job.skills,
+            "salary": job.salary,
+            "location": job.location,
+            "job_type": job.job_type,
+            "posted_at": job.posted_at,
+            "is_close": job.is_close
+        })
+
+    return jsonify(job_list)
+
+@app.route("/company/open_job/<int:job_id>", methods=["POST"])
+@jwt_required()
+def open_job(job_id):
+    current_user = get_jwt_identity()
+
+    company = CompanyProfile.query.filter_by(user_id=current_user).first()
+
+    if not company:
+        return jsonify({"message": "Company not found"}), 404
+
+    job = Job.query.filter_by(id=job_id, company_id=company.id).first()
+
+    if not job:
+        return jsonify({"message": "Job not found"}), 404
+
+    # already open
+    if job.is_close == False:
+        return jsonify({"message": "Job already open"}), 400
+
+    job.is_close = False   # ✅ FIX HERE
+    db.session.commit()
+
+    return jsonify({"message": "Job reopened successfully"})
+
+@app.route("/company/close_job/<int:job_id>", methods=["POST"])
+@jwt_required()
+def close_job(job_id):
+    current_user = get_jwt_identity()
+
+    company = CompanyProfile.query.filter_by(user_id=current_user).first()
+
+    if not company:
+        print('company not found')
+        return jsonify({"message": "Company not found"}), 404
+
+    job = Job.query.filter_by(id=job_id, company_id=company.id).first()
+
+    if not job:
+        print("job not found")
+        return jsonify({"message": "Job not found"}), 404
+
+    # already closed
+    if job.is_close == True:
+        return jsonify({"message": "Job already closed"}), 400
+
+    job.is_close = True
+    db.session.commit()
+
+    return jsonify({"message": "Job closed successfully"})
 
 def init_db():
     db.create_all()

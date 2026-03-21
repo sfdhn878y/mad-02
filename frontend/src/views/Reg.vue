@@ -31,6 +31,37 @@
   </div>
 </template>
 
+<script>
+import api from "../services/api";
+
+export default {
+  data() {
+    return {
+      name: "",
+      email: "",
+      password: "",
+      role: ""
+    };
+  },
+  methods: {
+    registerUser() {
+      api.post("/register", {
+        name: this.name,
+        email: this.email,
+        password: this.password,
+        role: this.role
+      })
+      .then(() => {
+        alert("Registration successful. Please login.");
+        this.$router.push("/login");
+      })
+      .catch(err => {
+        alert(err.response.data.msg);
+      });
+    }
+  }
+};
+</script>
 
 <style scoped>
 /* Full screen background */
