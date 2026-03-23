@@ -17,8 +17,17 @@ const routes = [
  {
     path: "/company_dashboard",
     component: () => import("./views/Company.vue"),
+    
   },
-
+ {
+    path: "/student-dashboard",
+    component: () => import("./views/Student.vue"),
+    
+  },
+  {
+      path: "/company/:id",
+      component: () => import("./views/CompanyDetail.vue"),
+  }
 ];
 
 const router = createRouter({

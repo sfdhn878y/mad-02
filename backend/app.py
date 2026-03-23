@@ -427,6 +427,284 @@ def close_job(job_id):
 
     return jsonify({"message": "Job closed successfully"})
 
+
+
+
+
+
+#############
+
+
+
+
+# ─── Student Routes ────────────────────────────────────────────────────────────
+# paste these routes directly into your app.py (above the if __name__ == "__main__" block)
+
+
+@app.route("/student/get_profile", methods=["GET"])
+@jwt_required()
+def get_student_profile():
+    user_id = get_jwt_identity()
+
+    user = User.query.filter_by(id=user_id).first()
+
+    if not user:
+        return jsonify({"message": "User not found"}), 404
+
+    profile = StudentProfile.query.filter_by(user_id=user_id).first()
+
+    if not profile:
+        return jsonify({"message": "Profile not found"}), 404
+
+    return jsonify({
+        "id": profile.id,
+        "user_name": user.name,
+        "department": profile.department,
+        "year": profile.year,
+        "cgpa": profile.cgpa,
+        "skills": profile.skills,
+        "resume": profile.resume,
+        "placement_status": profile.placement_status
+    }), 200
+
+
+@app.route("/student/create_profile", methods=["POST"])
+@jwt_required()
+def create_student_profile():
+    print("create student profile hit")
+    user_id = get_jwt_identity()
+
+    existing = StudentProfile.query.filter_by(user_id=user_id).first()
+    if existing:
+        return jsonify({"message": "Profile already exists"}), 400
+
+    data = request.get_json()
+
+    profile = StudentProfile(
+        user_id=user_id,
+        department=data.get("department"),
+        year=data.get("year"),
+        cgpa=data.get("cgpa"),
+        skills=data.get("skills")
+    )
+
+    db.session.add(profile)
+    db.session.commit()
+
+    return jsonify({"message": "Profile created successfully"}), 201
+
+
+@app.route("/student/edit_profile", methods=["POST"])
+@jwt_required()
+def edit_student_profile():
+    print("edit student profile hit")
+    user_id = get_jwt_identity()
+
+    profile = StudentProfile.query.filter_by(user_id=user_id).first()
+
+    if not profile:
+        return jsonify({"message": "Profile not found"}), 404
+
+    data = request.get_json()
+
+    profile.department = data.get("department", profile.department)
+    profile.year = data.get("year", profile.year)
+    profile.cgpa = data.get("cgpa", profile.cgpa)
+    profile.skills = data.get("skills", profile.skills)
+
+    db.session.commit()
+
+    return jsonify({"message": "Profile updated successfully"}), 200
+
+
+@app.route("/student/companies", methods=["GET"])
+@jwt_required()
+def get_all_companies():
+    print("get all companies hit")
+
+    companies = CompanyProfile.query.all()
+
+    company_list = []
+
+    for c in companies:
+        company_list.append({
+            "id": c.id,
+            "company_name": c.company_name,
+            "industry": c.industry,
+            "website": c.website,
+            "location": c.location,
+            "company_size": c.company_size
+        })
+
+    return jsonify(company_list)
+
+
+@app.route("/student/available_jobs", methods=["GET"])
+@jwt_required()
+def get_available_jobs():
+    print("available jobs hit")
+
+    jobs = Job.query.filter_by(is_approved=True, is_close=False).all()
+
+    job_list = []
+
+    for job in jobs:
+        job_list.append({
+            "id": job.id,
+            "title": job.title,
+            "description": job.description,
+            "skills": job.skills,
+            "experience": job.experience,
+            "salary": job.salary,
+            "location": job.location,
+            "job_type": job.job_type,
+            "company_name": job.company.company_name,
+            "posted_at": job.posted_at
+        })
+
+    return jsonify(job_list)
+
+
+@app.route("/student/apply/<int:job_id>", methods=["POST"])
+@jwt_required()
+def apply_for_job(job_id):
+    print("apply job hit")
+    user_id = get_jwt_identity()
+
+    profile = StudentProfile.query.filter_by(user_id=user_id).first()
+
+    if not profile:
+        return jsonify({"message": "Create your profile before applying"}), 400
+
+    job = Job.query.filter_by(id=job_id).first()
+
+    if not job:
+        return jsonify({"message": "Job not found"}), 404
+
+    if job.is_close:
+        return jsonify({"message": "This job is closed"}), 400
+
+    if not job.is_approved:
+        return jsonify({"message": "Job is not approved yet"}), 400
+
+    already_applied = Application.query.filter_by(job_id=job_id, student_id=profile.id).first()
+
+    if already_applied:
+        return jsonify({"message": "Already applied for this job"}), 400
+
+    application = Application(
+        job_id=job_id,
+        student_id=profile.id,
+        status="Applied",
+        applied_at=datetime.utcnow()
+    )
+
+    db.session.add(application)
+    db.session.commit()
+
+    return jsonify({"message": "Applied successfully"}), 201
+
+
+@app.route("/student/my_applications", methods=["GET"])
+@jwt_required()
+def get_my_applications():
+    print("my applications hit")
+    user_id = get_jwt_identity()
+
+    profile = StudentProfile.query.filter_by(user_id=user_id).first()
+
+    if not profile:
+        return jsonify([])
+
+    applications = Application.query.filter_by(student_id=profile.id).all()
+
+    app_list = []
+
+    for a in applications:
+        app_list.append({
+            "id": a.id,
+            "job_id": a.job_id,
+            "job_title": a.job.title,
+            "company_name": a.job.company.company_name,
+            "status": a.status,
+            "applied_at": a.applied_at,
+            "remarks": a.remarks,
+            "interview_datetime": a.interview_datetime,
+            "interview_mode": a.interview_mode,
+            "interview_link": a.interview_link,
+            "interview_location": a.interview_location,
+            "feedback": a.feedback,
+            "offer_letter": a.offer_letter
+        })
+
+    return jsonify(app_list)
+
+
+
+
+
+
+# paste this route into your app.py (with the other student routes)
+ 
+@app.route("/student/company_details/<int:company_id>", methods=["GET"])
+@jwt_required()
+def get_company_details(company_id):
+    print("company details hit")
+ 
+    company = CompanyProfile.query.filter_by(id=company_id).first()
+ 
+    if not company:
+        return jsonify({"message": "Company not found"}), 404
+ 
+    # only show approved and open jobs of this company
+    jobs = Job.query.filter_by(company_id=company_id, is_approved=True).all()
+ 
+    job_list = []
+ 
+    for job in jobs:
+        job_list.append({
+            "id": job.id,
+            "title": job.title,
+            "description": job.description,
+            "skills": job.skills,
+            "experience": job.experience,
+            "salary": job.salary,
+            "location": job.location,
+            "job_type": job.job_type,
+            "is_close": job.is_close,
+            "posted_at": job.posted_at
+        })
+ 
+    return jsonify({
+        "company": {
+            "id": company.id,
+            "company_name": company.company_name,
+            "industry": company.industry,
+            "website": company.website,
+            "location": company.location,
+            "company_size": company.company_size
+        },
+        "jobs": job_list
+    })
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 def init_db():
     db.create_all()
 
