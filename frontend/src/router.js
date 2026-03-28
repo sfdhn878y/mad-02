@@ -27,7 +27,12 @@ const routes = [
   {
       path: "/company/:id",
       component: () => import("./views/CompanyDetail.vue"),
-  }
+  },
+   {
+  path: "/job/:jobId/applicants",
+  component: () => import("./views/ViewApplicant.vue"),
+}
+  
 ];
 
 const router = createRouter({

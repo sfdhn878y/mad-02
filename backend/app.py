@@ -22,135 +22,161 @@ db = SQLAlchemy(app)
 
 
 
-
-
-
-
+# ---------------- USER ----------------
 class User(db.Model):
     __tablename__ = "users"
 
     id = db.Column(db.Integer, primary_key=True)
+
     name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
-    password = db.Column(db.String(200), nullable=False) 
+    password = db.Column(db.String(200), nullable=False)  # store hashed password
     role = db.Column(db.String(20), nullable=False)  # admin / student / company
+
     phone = db.Column(db.String(15))
     is_active = db.Column(db.Boolean, default=True)
     is_approved = db.Column(db.Boolean, default=False)
+
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    # one to one relationship one User has one StudentProfile
+
+    # one user → one student profile
     student_profile = db.relationship(
         "StudentProfile",
         back_populates="user",
-        uselist=False
+        uselist=False,
+        cascade="all, delete"
     )
 
-    # one to one relationship one User has one CompanyProfile
+    # one user → one company profile
     company_profile = db.relationship(
         "CompanyProfile",
         back_populates="user",
-        uselist=False
+        uselist=False,
+        cascade="all, delete"
     )
-# StudentProfile model
+
+
+# ---------------- STUDENT PROFILE ----------------
 class StudentProfile(db.Model):
     __tablename__ = "student_profiles"
 
     id = db.Column(db.Integer, primary_key=True)
-    # foriegn key one to one each StudentProfile belongs to one User
+
+    # one-to-one → must be unique
     user_id = db.Column(
         db.Integer,
         db.ForeignKey("users.id"),
-        nullable=False
+        nullable=False,
+        unique=True
     )
+
     department = db.Column(db.String(100))
     year = db.Column(db.Integer)
     cgpa = db.Column(db.Float)
-    skills = db.Column(db.String(200))  # comma-separated
+
+    skills = db.Column(db.String(200))  # simple for now (comma separated)
     resume = db.Column(db.String(200))
-    placement_status = db.Column(
-        db.String(50), default="Not Placed"
-    )
-    # one to one each StudentProfile belongs to one User
+
+    placement_status = db.Column(db.String(50), default="Not Placed")
+
+    # relation back to user
     user = db.relationship("User", back_populates="student_profile")
-    #one to many relationship one Student can apply to many jobs
+
+    # one student → many applications
     applications = db.relationship(
         "Application",
-        back_populates="student"
+        back_populates="student",
+        cascade="all, delete"
     )
-#CompanyProfile model
+
+
+# ---------------- COMPANY PROFILE ----------------
 class CompanyProfile(db.Model):
     __tablename__ = "company_profiles"
 
     id = db.Column(db.Integer, primary_key=True)
-    # foriegn key one to one each CompanyProfile belongs to one User
+
+    # one-to-one → must be unique
     user_id = db.Column(
         db.Integer,
         db.ForeignKey("users.id"),
-        nullable=False
+        nullable=False,
+        unique=True
     )
+
     company_name = db.Column(db.String(150))
     industry = db.Column(db.String(100))
     website = db.Column(db.String(150))
     location = db.Column(db.String(100))
     company_size = db.Column(db.String(50))
-    # one to one each CompanyProfile belongs to one User
+
+    # relation back to user
     user = db.relationship("User", back_populates="company_profile")
-    #one to many relationship one company can post many jobs
+
+    # one company → many jobs
     jobs = db.relationship(
         "Job",
-        back_populates="company"
+        back_populates="company",
+        cascade="all, delete"
     )
 
-#job model
+
+# ---------------- JOB ----------------
 class Job(db.Model):
     __tablename__ = "jobs"
 
     id = db.Column(db.Integer, primary_key=True)
 
-    # Foreign key → many jobs belong to one company
     company_id = db.Column(
         db.Integer,
         db.ForeignKey("company_profiles.id"),
         nullable=False
     )
 
-    # Basic job info
     title = db.Column(db.String(150), nullable=False)
     description = db.Column(db.Text, nullable=False)
 
-    # Requirements
-    skills = db.Column(db.String(200), nullable=False)   # comma-separated
-    experience = db.Column(db.String(50))                # NEW
+    skills = db.Column(db.String(200), nullable=False)
+    experience = db.Column(db.String(50))
     salary = db.Column(db.String(50))
-    benefits = db.Column(db.String(300))                 # NEW
+    benefits = db.Column(db.String(300))
 
-    # Extra details (very useful)
     location = db.Column(db.String(100))
     job_type = db.Column(db.String(50), default="Full-time")
 
-    # Admin approval system
     is_approved = db.Column(db.Boolean, default=False)
+    is_closed = db.Column(db.Boolean, default=False)
 
-    # Timestamp
     posted_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    # Relationships
+    # relation
     company = db.relationship("CompanyProfile", back_populates="jobs")
-    is_close = db.Column(db.Boolean, default=False)
 
+    # one job → many applications
     applications = db.relationship(
         "Application",
         back_populates="job",
         cascade="all, delete"
-    )#application model
+    )
 
+
+# ---------------- APPLICATION ----------------
 class Application(db.Model):
     __tablename__ = "applications"
 
     id = db.Column(db.Integer, primary_key=True)
 
-    job_id = db.Column(db.Integer, db.ForeignKey("jobs.id"))
-    student_id = db.Column(db.Integer, db.ForeignKey("student_profiles.id"))
+    job_id = db.Column(
+        db.Integer,
+        db.ForeignKey("jobs.id"),
+        nullable=False
+    )
+
+    student_id = db.Column(
+        db.Integer,
+        db.ForeignKey("student_profiles.id"),
+        nullable=False
+    )
 
     status = db.Column(db.String(50), default="Applied")
 
@@ -159,19 +185,18 @@ class Application(db.Model):
 
     remarks = db.Column(db.Text)
 
-    # ✅ NEW FIELDS
+    # interview details
     interview_datetime = db.Column(db.DateTime)
-    interview_mode = db.Column(db.String(50))   # Online / Offline
+    interview_mode = db.Column(db.String(50))  # Online / Offline
     interview_link = db.Column(db.String(300))
     interview_location = db.Column(db.String(200))
+
     feedback = db.Column(db.Text)
     offer_letter = db.Column(db.String(200))
+
+    # relations
     job = db.relationship("Job", back_populates="applications")
     student = db.relationship("StudentProfile", back_populates="applications")
-
-
-
-
 
 #Routing
 #registeration
@@ -352,7 +377,7 @@ def post_job():
 @jwt_required()
 def get_my_jobs():
     user_id = get_jwt_identity() #2
-
+    print(user_id)
     company = CompanyProfile.query.filter_by(user_id=user_id).first()
 
     if not company:
@@ -361,6 +386,7 @@ def get_my_jobs():
     jobs = Job.query.filter_by(company_id=company.id).all()
 
     job_list = []
+    print(job_list)
 
     for job in jobs:
         job_list.append({
@@ -372,7 +398,7 @@ def get_my_jobs():
             "location": job.location,
             "job_type": job.job_type,
             "posted_at": job.posted_at,
-            "is_close": job.is_close
+            "is_close": job.is_closed
         })
 
     return jsonify(job_list)
@@ -581,7 +607,7 @@ def apply_for_job(job_id):
     if not job:
         return jsonify({"message": "Job not found"}), 404
 
-    if job.is_close:
+    if job.is_closed:
         return jsonify({"message": "This job is closed"}), 400
 
     if not job.is_approved:
@@ -671,7 +697,7 @@ def get_company_details(company_id):
             "salary": job.salary,
             "location": job.location,
             "job_type": job.job_type,
-            "is_close": job.is_close,
+            "is_close": job.is_closed,
             "posted_at": job.posted_at
         })
  
@@ -711,10 +737,11 @@ def init_db():
     # -----------------------
     # 1️Admin
     # -----------------------
+    
     if not User.query.filter_by(role="admin").first():
         admin = User(
             name="Admin",
-            email="admin@college.com",
+            email="admin@college.com",  
             password=generate_password_hash("admin123"),
             role="admin",
             is_approved=True
@@ -725,8 +752,59 @@ def init_db():
 
 
 
+
+
+
+@app.route("/company/job/<int:job_id>/applicants", methods=["GET"])
+@jwt_required()
+def get_applicants(job_id):
+    current_user = get_jwt_identity()
+
+    # get company
+    company = CompanyProfile.query.filter_by(user_id=current_user).first()
+
+    if not company:
+        return jsonify({"message": "Company not found"}), 404
+
+    # check job belongs to this company
+    job = Job.query.filter_by(id=job_id, company_id=company.id).first()
+
+    if not job:
+        return jsonify({"message": "Job not found"}), 404
+
+    applicants = []
+
+    for app in job.applications:
+        student = app.student
+        user = student.user
+
+        applicants.append({
+            "application_id": app.id,
+            "status": app.status,
+            "name": user.name,
+            "email": user.email,
+            "phone": user.phone,
+            "skills": student.skills,
+            "cgpa": student.cgpa,
+            "resume": student.resume
+        })
+
+    return jsonify(applicants), 200
+
+
+
+
+
+
+
+
+
+
+
+
 if __name__== "__main__":
     with app.app_context():
+        
         init_db()
 
     app.run(debug=True)

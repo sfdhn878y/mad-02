@@ -82,7 +82,12 @@
         >
           Reopen Job
         </button>
-        <button class="view-btn">View Applicants</button>
+        <button
+          @click="$router.push(`/job/${job.id}/applicants`)"
+          class="view-btn"
+        >
+          View Applicants
+        </button>
       </div>
     </div>
   </div>
@@ -177,7 +182,8 @@ export default {
           this.fetchJobs(); // refresh jobs
         })
         .catch((err) => {
-          alert(err.message);
+          console.log("post the job");
+          alert(err.response.data.message);
         });
     },
 
@@ -188,6 +194,7 @@ export default {
         .get("/company/my_jobs", {
           headers: { Authorization: `Bearer ${token}` },
         })
+
         .then((res) => {
           this.jobs = res.data;
         })
@@ -197,7 +204,7 @@ export default {
     },
 
     closeJob(jobId) {
-      console.log('close job hit')
+      console.log("close job hit");
       const token = localStorage.getItem("token");
 
       if (!confirm("Are you sure you want to close this job?")) return;
@@ -219,7 +226,7 @@ export default {
         });
     },
     openJob(jobId) {
-      console.log('open job hit')
+      console.log("open job hit");
       const token = localStorage.getItem("token");
 
       api
