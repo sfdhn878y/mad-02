@@ -1,6 +1,6 @@
-
-
-from flask import Flask, request, jsonify
+from werkzeug.utils import secure_filename
+import os
+from flask import Flask, request, jsonify,url_for
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -754,21 +754,22 @@ def init_db():
 
 
 
+from flask import jsonify, request
+from flask_jwt_extended import jwt_required, get_jwt_identity
+from urllib.parse import urljoin
 
 @app.route("/company/job/<int:job_id>/applicants", methods=["GET"])
 @jwt_required()
 def get_applicants(job_id):
     current_user = get_jwt_identity()
 
-    # get company
+    # Get company
     company = CompanyProfile.query.filter_by(user_id=current_user).first()
-
     if not company:
         return jsonify({"message": "Company not found"}), 404
 
-    # check job belongs to this company
+    # Check job belongs to this company
     job = Job.query.filter_by(id=job_id, company_id=company.id).first()
-
     if not job:
         return jsonify({"message": "Job not found"}), 404
 
@@ -778,6 +779,17 @@ def get_applicants(job_id):
         student = app.student
         user = student.user
 
+        # Build full resume URL
+        resume_url = None
+        if student.resume:
+            resume_url = request.host_url + student.resume
+
+        # Build full offer letter URL
+
+        offer_letter_url = None
+        if app.offer_letter:
+            offer_letter_url = url_for('uploaded_file', filename=app.offer_letter.replace("uploads/", ""), _external=True)
+
         applicants.append({
             "application_id": app.id,
             "status": app.status,
@@ -786,20 +798,66 @@ def get_applicants(job_id):
             "phone": user.phone,
             "skills": student.skills,
             "cgpa": student.cgpa,
-            "resume": student.resume
+            "resume": resume_url,
+            "interview_datetime": app.interview_datetime,
+            "interview_link": app.interview_link,
+            "offer_letter": offer_letter_url   # ✅ NEW FIELD
         })
 
     return jsonify(applicants), 200
 
+from flask import send_from_directory
+
+app.config["UPLOAD_FOLDER"] = "uploads"
+
+@app.route('/uploads/<path:filename>')
+def uploaded_file(filename):
+    return send_from_directory(app.config["UPLOAD_FOLDER"], filename)
 
 
+from datetime import datetime
 
+@app.route("/company/application/<int:app_id>/status", methods=["PUT"])
+@jwt_required()
+def update_application_status(app_id):
 
+    app = Application.query.get_or_404(app_id)
 
+    status = request.form.get("status")
 
+    app.status = status
+    app.updated_at = datetime.utcnow()
 
+    if application.status == "select":
+        return jsonify({"message": "Status cannot be changed after selection"}), 400
 
+    if status == "shortlist":
+        interview_str = request.form.get("interview_datetime")
 
+        if interview_str:
+            app.interview_datetime = datetime.strptime(
+                interview_str, "%Y-%m-%dT%H:%M"
+            )
+
+        app.interview_link = request.form.get("interview_link")
+
+    if status == "reject":
+        app.feedback = request.form.get("feedback")
+
+    if status == "select":
+        file = request.files.get("offer_letter")
+        if file:
+            filename = secure_filename(file.filename)
+            path = os.path.join("uploads/offers", filename)
+            file.save(path)
+            app.offer_letter = path
+
+            # mark student placed
+            app.student.placement_status = "Placed"
+
+    db.session.commit()
+
+    return jsonify({"message": "Updated successfully"})
 
 
 if __name__== "__main__":
