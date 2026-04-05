@@ -148,7 +148,7 @@ class Job(db.Model):
     is_closed = db.Column(db.Boolean, default=False)
 
     posted_at = db.Column(db.DateTime, default=datetime.utcnow)
-
+    is_blacklisted = db.Column(db.Boolean, default=False)
     # relation
     company = db.relationship("CompanyProfile", back_populates="jobs")
 
@@ -228,6 +228,82 @@ def register():
         "user_id": user.id,
         "role": user.role
     })
+
+
+@app.route("/admin/all_students", methods=["GET"])
+def get_all_students():
+    # get all users with role = student
+    students = User.query.filter_by(role="student").all()
+
+    all_students = []
+
+    for user in students:
+        profile = user.student_profile  # one-to-one relationship
+
+        student_data = {
+            "user_id": user.id,
+            "name": user.name,
+            "email": user.email,
+            "phone": user.phone,
+            "is_active": user.is_active,
+            "created_at": user.created_at,
+
+            # student profile data
+            "department": profile.department if profile else None,
+            "year": profile.year if profile else None,
+            "cgpa": profile.cgpa if profile else None,
+            "skills": profile.skills if profile else None,
+            "placement_status": profile.placement_status if profile else None,
+        }
+
+        all_students.append(student_data)
+
+    return jsonify(all_students)
+
+
+from flask import jsonify
+from flask_jwt_extended import jwt_required, get_jwt
+
+@app.route("/admin/student_details/<int:user_id>", methods=["GET"])
+@jwt_required()
+def get_student_details(user_id):
+    # 🔐 Check if admin
+    claims = get_jwt()
+    if claims.get("role") != "admin":
+        return jsonify({"message": "Unauthorized"}), 403
+
+    # 👤 Get student user
+    user = User.query.filter_by(id=user_id, role="student").first()
+
+    if not user:
+        return jsonify({"message": "Student not found"}), 404
+
+    profile = user.student_profile
+
+    # 📄 Applications list
+    applications_list = []
+    applications_count = 0
+
+    if profile:
+        applications_count = len(profile.applications)
+
+        for app in profile.applications:
+            applications_list.append({
+                "job": app.job.title,
+                "company": app.job.company.company_name,
+                "status": app.status
+            })
+
+    # 📦 Final response
+    return jsonify({
+        "id": user.id,
+        "name": user.name,
+        "department": profile.department if profile else None,
+        "cgpa": profile.cgpa if profile else None,
+        "applications_count": applications_count,
+        "applications": applications_list
+    })
+
 
 
 
@@ -719,14 +795,62 @@ def get_company_details(company_id):
 
 
 
+@app.route("/admin/approve_job/<int:job_id>", methods=["PUT"])
+@jwt_required()
+def approve_job(job_id):
+    try:
+        user_id = get_jwt_identity()
+        user = User.query.get(user_id)
 
+        # check admin
+        if not user or user.role != "admin":
+            return jsonify({"msg": "not allowed bro"}), 403
 
+        job = Job.query.get(job_id)
 
+        if not job:
+            return jsonify({"msg": "job not found"}), 404
 
+        # approve job
+        job.is_approved = True
 
+        db.session.commit()
 
+        return jsonify({
+            "msg": "job approved",
+            "job_id": job.id
+        }), 200
 
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
+@app.route("/admin/reject_job/<int:job_id>", methods=["PUT"])
+@jwt_required()
+def reject_job(job_id):
+    try:
+        user_id = get_jwt_identity()
+        user = User.query.get(user_id)
+
+        if not user or user.role != "admin":
+            return jsonify({"msg": "not allowed"}), 403
+
+        job = Job.query.get(job_id)
+
+        if not job:
+            return jsonify({"msg": "job not found"}), 404
+
+        # you can either delete OR just keep unapproved
+        job.is_approved = False
+
+        db.session.commit()
+
+        return jsonify({
+            "msg": "job rejected",
+            "job_id": job.id
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 
@@ -828,7 +952,7 @@ def update_application_status(app_id):
     app.status = status
     app.updated_at = datetime.utcnow()
 
-    if application.status == "select":
+    if Application.status == "select":
         return jsonify({"message": "Status cannot be changed after selection"}), 400
 
     if status == "shortlist":
@@ -860,6 +984,196 @@ def update_application_status(app_id):
     return jsonify({"message": "Updated successfully"})
 
 
+
+@app.route("/admin/stats", methods=["GET"])
+@jwt_required()
+def admin_stats():
+
+    return jsonify({
+        "companies": CompanyProfile.query.count(),
+        "students": StudentProfile.query.count(),
+        "jobs": Job.query.count(),
+        "applications": Application.query.count()
+    })
+@app.route("/admin/pending_companies", methods=["GET"])
+@jwt_required()
+def get_pending_companies():
+
+    users = User.query.filter_by(
+        role="company",
+        is_approved=False
+    ).all()
+
+    return jsonify([
+        {
+            "id": u.id,
+            "name": u.name,
+            "email": u.email
+        }
+        for u in users
+    ])
+@app.route("/admin/approve_company/<int:id>", methods=["POST"])
+@jwt_required()
+def approve_company(id):
+
+    user = User.query.get(id)
+
+    if not user:
+        return jsonify({"msg": "not found"}), 404
+
+    user.is_approved = True
+    db.session.commit()
+
+    return jsonify({"msg": "approved"})
+
+@app.route("/admin/all_companies", methods=["GET"])
+@jwt_required()
+def all_companies():
+
+    companies = CompanyProfile.query.all()
+
+    data = []
+    for c in companies:
+        data.append({
+            "id": c.id,
+            "company_name": c.company_name,
+            "location": c.location,
+            "jobs_count": len(c.jobs),
+
+            # 🔥 ADD THIS
+            "is_blocked": not c.user.is_active
+        })
+
+    return jsonify(data)
+
+@app.route("/admin/toggle_company_block/<int:id>", methods=["POST"])
+@jwt_required()
+def toggle_company_block(id):
+
+    company = CompanyProfile.query.get(id)
+
+    if not company:
+        return jsonify({"msg": "not found"}), 404
+
+    user = company.user   # 🔥 get user from relation
+
+    # toggle user active status
+    user.is_active = not user.is_active
+
+    # decide job blacklist based on user state
+    new_state = not user.is_active   # if inactive → blacklist = True
+
+    for job in company.jobs:
+        job.is_blacklisted = new_state
+
+    db.session.commit()
+
+    return jsonify({
+        "msg": "updated",
+        "user_active": user.is_active
+    })
+
+@app.route("/admin/pending_jobs", methods=["GET"])
+@jwt_required()
+def get_pending_jobs():
+
+    # get all jobs not approved
+    jobs = Job.query.filter_by(is_approved=False).all()
+
+    data = []
+    for j in jobs:
+        data.append({
+            "id": j.id,
+            "title": j.title,
+            "company": j.company.company_name if j.company else "N/A"
+        })
+
+    return jsonify(data)
+
+@app.route("/admin/company_details/<int:id>", methods=["GET"])
+@jwt_required()
+def company_details(id):
+
+    c = CompanyProfile.query.get(id)
+
+    return jsonify({
+        "company_name": c.company_name,
+        "industry": c.industry,
+        "location": c.location,
+
+        "jobs_count": len(c.jobs),
+
+        "jobs": [
+            {
+                "title": j.title,
+                "salary": j.salary,
+                "blacklisted": j.is_blacklisted
+            }
+            for j in c.jobs
+        ]
+    })
+
+
+@app.route("/admin/all_jobs", methods=["GET"])
+@jwt_required()
+def get_all_jobs():
+    try:
+        user_id = get_jwt_identity()
+        user = User.query.get(user_id)
+
+        # only admin
+        if not user or user.role != "admin":
+            return jsonify({"msg": "not allowed"}), 403
+
+        jobs = Job.query.all()
+
+        data = []
+        for j in jobs:
+            data.append({
+                "id": j.id,
+                "title": j.title,
+                "company": j.company.company_name,
+                "location": j.location,
+                "salary": j.salary,
+                "is_approved": j.is_approved,
+                "is_closed": j.is_closed,
+                "posted_at": j.posted_at
+            })
+
+        return jsonify(data), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/admin/toggle_job_block/<int:job_id>", methods=["POST"])
+@jwt_required()
+def toggle_job_block(job_id):
+    try:
+        user_id = get_jwt_identity()
+        user = User.query.get(user_id)
+
+        # check admin
+        if not user or user.role != "admin":
+            return jsonify({"msg": "not allowed"}), 403
+
+        job = Job.query.get(job_id)
+
+        if not job:
+            return jsonify({"msg": "job not found"}), 404
+
+        # toggle block/unblock
+        job.is_blacklisted = not job.is_blacklisted
+
+        db.session.commit()
+
+        return jsonify({
+            "msg": "job block toggled",
+            "job_id": job.id,
+            "is_blacklisted": job.is_blacklisted
+        }), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500     
 if __name__== "__main__":
     with app.app_context():
         
