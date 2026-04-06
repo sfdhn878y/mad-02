@@ -27,17 +27,7 @@
         <p><b>Location:</b> {{ job.location }}</p>
         <p><b>Job Type:</b> {{ job.job_type }}</p>
 
-        <div class="job-actions">
-          <span v-if="job.is_close" class="closed-badge">Closed</span>
-          <button
-            v-else
-            class="view-btn"
-            :disabled="hasApplied(job.id)"
-            @click="applyJob(job.id)"
-          >
-            {{ hasApplied(job.id) ? "Applied" : "Apply" }}
-          </button>
-        </div>
+        
       </div>
     </div>
 

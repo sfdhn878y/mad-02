@@ -31,6 +31,19 @@ const routes = [
    {
   path: "/job/:jobId/applicants",
   component: () => import("./views/ViewApplicant.vue"),
+},
+   {
+  path: "/admin",
+  component: () => import("./views/Admin.vue"),
+},
+{
+  path: "/admin/company/:id",
+  component: () => import("./views/CompanyDetail.vue"),
+},
+
+{
+  path: "/admin/student/:id",
+  component: () => import("./views/StudentDetail.vue"),
 }
   
 ];
