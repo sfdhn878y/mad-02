@@ -38,12 +38,17 @@ const routes = [
 },
 {
   path: "/admin/company/:id",
-  component: () => import("./views/CompanyDetail.vue"),
+  component: () => import("./views/CompanyDetailAdmin.vue"),
 },
 
 {
   path: "/admin/student/:id",
   component: () => import("./views/StudentDetail.vue"),
+},
+
+{
+  path: "/admin/job/:id",
+  component: () => import("./views/AdminJobDetail.vue")
 }
   
 ];

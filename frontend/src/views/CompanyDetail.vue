@@ -16,7 +16,9 @@
     <div class="section-box">
       <h3>Jobs Posted</h3>
 
-      <p v-if="jobs.length === 0" class="empty-msg">No jobs posted by this company.</p>
+      <p v-if="jobs.length === 0" class="empty-msg">
+        No jobs posted by this company.
+      </p>
 
       <div v-for="job in jobs" :key="job.id" class="job-card">
         <p><b>{{ job.title }}</b></p>
@@ -27,7 +29,21 @@
         <p><b>Location:</b> {{ job.location }}</p>
         <p><b>Job Type:</b> {{ job.job_type }}</p>
 
-        
+        <!-- Apply Section -->
+        <div class="job-actions">
+          <button
+            v-if="!hasApplied(job.id)"
+            class="apply-btn"
+            @click="applyJob(job.id)"
+          >
+            Apply
+          </button>
+
+          <span v-else class="applied-badge">
+            ✓ Applied
+          </span>
+        </div>
+
       </div>
     </div>
 
@@ -51,36 +67,34 @@ export default {
       const token = localStorage.getItem("token");
       const companyId = this.$route.params.id;
 
-      api
-        .get(`/student/company_details/${companyId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        })
-        .then((res) => {
-          this.company = res.data.company;
-          this.jobs = res.data.jobs;
-        })
-        .catch(() => {
-          console.log("Error fetching company details");
-        });
+      api.get(`/student/company_details/${companyId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      .then((res) => {
+        this.company = res.data.company;
+        this.jobs = res.data.jobs;
+      })
+      .catch(() => {
+        console.log("Error fetching company details");
+      });
     },
 
     fetchMyApplications() {
       const token = localStorage.getItem("token");
 
-      api
-        .get("/student/my_applications", {
-          headers: { Authorization: `Bearer ${token}` },
-        })
-        .then((res) => {
-          this.myApplications = res.data;
-        })
-        .catch(() => {
-          console.log("Error fetching applications");
-        });
+      api.get("/student/my_applications", {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      .then((res) => {
+        this.myApplications = res.data;
+      })
+      .catch(() => {
+        console.log("Error fetching applications");
+      });
     },
 
     hasApplied(jobId) {
-      return this.myApplications.some((app) => app.job_id === jobId);
+      return this.myApplications.some(app => app.job_id === jobId);
     },
 
     applyJob(jobId) {
@@ -88,21 +102,20 @@ export default {
 
       if (!confirm("Apply for this job?")) return;
 
-      api
-        .post(
-          `/student/apply/${jobId}`,
-          {},
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        )
-        .then(() => {
-          alert("Applied successfully");
-          this.fetchMyApplications(); // refresh so button turns to Applied
-        })
-        .catch((err) => {
-          alert(err.response?.data?.message || "Error applying");
-        });
+      api.post(
+        `/student/apply/${jobId}`,
+        {},
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      )
+      .then(() => {
+        alert("Applied successfully");
+        this.myApplications.push({ job_id: jobId });
+      })
+      .catch((err) => {
+        alert(err.response?.data?.message || "Error applying");
+      });
     },
   },
 
@@ -154,27 +167,27 @@ export default {
 }
 
 .job-actions {
-  margin-top: 8px;
+  margin-top: 10px;
 }
 
-.closed-badge {
-  background: #ccc;
-  color: #555;
-  padding: 4px 10px;
-  font-size: 13px;
-}
-
-.view-btn {
-  background: #2196f3;
+.apply-btn {
+  background: #4caf50;
   color: white;
   border: none;
-  padding: 6px 12px;
+  padding: 6px 14px;
   cursor: pointer;
+  font-size: 14px;
 }
 
-.view-btn:disabled {
-  background: #aaa;
-  cursor: not-allowed;
+.apply-btn:hover {
+  background: #45a049;
+}
+
+.applied-badge {
+  background: #e0e0e0;
+  color: #333;
+  padding: 5px 12px;
+  font-size: 13px;
 }
 
 .empty-msg {

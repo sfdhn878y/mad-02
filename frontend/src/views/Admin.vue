@@ -25,6 +25,12 @@
 
     <!-- ===== APPROVED COMPANIES ===== -->
     <h3>Companies</h3>
+
+    <input
+      v-model="companySearch"
+      @input="searchCompanies"
+      placeholder="Search by name or industry..."
+    />
     <div v-for="c in companies" :key="c.id" class="card">
       <p>
         <b>{{ c.company_name }}</b>
@@ -39,13 +45,23 @@
 
     <!-- ===== STUDENTS ===== -->
     <h3>Students</h3>
+
+    <input
+      v-model="studentSearch"
+      @input="searchStudents"
+      placeholder="Search by name, ID, email, or phone..."
+    />
     <div v-for="s in students" :key="s.id" class="card">
       <p>
         <b>{{ s.name }}</b>
       </p>
       <p>Applications: {{ s.applications }}</p>
-        {{ s.id }} this is s.id <br>
+
       <button class="view-btn" @click="viewStudent(s.user_id)">View</button>
+
+      <button class="danger-btn" @click="toggleStudent(s.user_id)">
+        {{ s.is_active ? "Block" : "Unblock" }}
+      </button>
     </div>
 
     <!-- ===== PENDING JOBS ===== -->
@@ -68,7 +84,7 @@
         <b>{{ j.title }}</b>
       </p>
       <p>{{ j.company }}</p>
-
+      <button class="view-btn" @click="viewJob(j.id)">View</button>
       <button class="danger-btn" @click="blockJob(j.id)">
         {{ j.is_blacklisted ? "Unblock" : "Block" }}
       </button>
@@ -253,6 +269,62 @@ export default {
 
     viewStudent(id) {
       this.$router.push(`/admin/student/${id}`);
+    },
+    toggleStudent(id) {
+      const token = localStorage.getItem("token");
+
+      api
+        .post(
+          `/admin/toggle_student_block/${id}`,
+          {},
+          { headers: { Authorization: `Bearer ${token}` } }
+        )
+        .then(() => {
+          // 🔥 instant UI update
+          const student = this.students.find((s) => s.user_id === id);
+          if (student) {
+            student.is_active = !student.is_active;
+          }
+        })
+        .catch(() => {
+          alert("Error updating student status");
+        });
+    },
+    viewJob(id) {
+      this.$router.push(`/admin/job/${id}`);
+    },
+    searchStudents() {
+      const token = localStorage.getItem("token");
+
+      if (this.studentSearch.trim() === "") {
+        this.loadStudents();
+        return;
+      }
+
+      api
+        .get(`/admin/search_students?q=${this.studentSearch}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        .then((res) => {
+          this.students = res.data;
+        });
+    },
+
+    searchCompanies() {
+      const token = localStorage.getItem("token");
+
+      if (this.companySearch.trim() === "") {
+        this.loadCompanies();
+        return;
+      }
+
+      api
+        .get(`/admin/search_companies?q=${this.companySearch}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        .then((res) => {
+          this.companies = res.data;
+        });
     },
   },
 

@@ -3,34 +3,33 @@
     <h2>Student Details</h2>
 
     <div v-if="data">
-
       <p><b>Name:</b> {{ data.name }}</p>
       <p><b>Department:</b> {{ data.department }}</p>
       <p><b>CGPA:</b> {{ data.cgpa }}</p>
       <p><b>Total Applications:</b> {{ data.applications_count }}</p>
-
+      <p><b>Email:</b> {{ data.email }}</p>
+      <p><b>Phone:</b> {{ data.phone }}</p>
+      <p><b>Year:</b> {{ data.year }}</p>
+      <p><b>Skills:</b> {{ data.skills }}</p>
+      <p><b>Placement Status:</b> {{ data.placement_status }}</p>
+      <p><b>Account Active:</b> {{ data.is_active ? "Yes" : "Blocked" }}</p>
+      <p><b>Joined On:</b> {{ data.created_at }}</p>
       <h3>Applications</h3>
 
-      <div v-if="data.applications.length === 0">
-        No applications
-      </div>
+      <div v-if="data.applications.length === 0">No applications</div>
 
-      <div
-        v-for="app in data.applications"
-        :key="app.job"
-        class="card"
-      >
-        <p><b>{{ app.job }}</b></p>
+      <div v-for="app in data.applications" :key="app.job" class="card">
+        <p>
+          <b>{{ app.job }}</b>
+        </p>
         <p>Company: {{ app.company }}</p>
         <p>Status: {{ app.status }}</p>
+
+        
       </div>
-
     </div>
 
-    <div v-else>
-      Loading...
-    </div>
-
+    <div v-else>Loading...</div>
   </div>
 </template>
 <script>

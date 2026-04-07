@@ -69,7 +69,7 @@
 
         <button
           class="danger-btn"
-          v-if="job.is_close === false"
+          v-if="job.is_closed === false"
           @click="closeJob(job.id)"
         >
           Close Job
@@ -77,7 +77,7 @@
 
         <button
           class="view-btn"
-          v-if="job.is_close === true"
+          v-if="job.is_closed === true"
           @click="openJob(job.id)"
         >
           Reopen Job
@@ -88,8 +88,20 @@
         >
           View Applicants
         </button>
+        <p>
+  <b>Status:</b>
+  <span
+    :style="{
+      color: !job.is_approved ? 'orange' : job.is_closed ? 'red' : 'green',
+    }"
+  >
+    {{ !job.is_approved ? "Pending" : job.is_closed ? "Closed" : "Open" }}
+  </span>
+</p>
       </div>
+      
     </div>
+    
   </div>
 </template>
 

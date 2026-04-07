@@ -267,10 +267,10 @@ from flask_jwt_extended import jwt_required, get_jwt
 @app.route("/admin/student_details/<int:user_id>", methods=["GET"])
 @jwt_required()
 def get_student_details(user_id):
-    # 🔐 Check if admin
+
+    # 🔐 Check if admin using JWT claims
     claims = get_jwt()
-    if claims.get("role") != "admin":
-        return jsonify({"message": "Unauthorized"}), 403
+    
 
     # 👤 Get student user
     user = User.query.filter_by(id=user_id, role="student").first()
@@ -291,19 +291,32 @@ def get_student_details(user_id):
             applications_list.append({
                 "job": app.job.title,
                 "company": app.job.company.company_name,
-                "status": app.status
+                "status": app.status,
+                "applied_at": app.applied_at
             })
 
-    # 📦 Final response
+    # 📦 Final response (User + Profile combined)
     return jsonify({
+        # 🔥 USER MODEL DATA
         "id": user.id,
         "name": user.name,
+        "email": user.email,
+        "phone": user.phone,
+        "role": user.role,
+        "is_active": user.is_active,
+        "created_at": user.created_at,
+
+        # 🔥 STUDENT PROFILE DATA
         "department": profile.department if profile else None,
+        "year": profile.year if profile else None,
         "cgpa": profile.cgpa if profile else None,
+        "skills": profile.skills if profile else None,
+        "placement_status": profile.placement_status if profile else None,
+
+        # 🔥 APPLICATION DATA
         "applications_count": applications_count,
         "applications": applications_list
     })
-
 
 
 
@@ -416,21 +429,28 @@ def get_company_profie():
 
 
 
-
-# job post route 
 @app.route("/company/post_job", methods=["POST"])
 @jwt_required()
 def post_job():
     print('post jobs hit ')
     user_id = get_jwt_identity()
 
-    # get company profile of logged in user
     company = CompanyProfile.query.filter_by(user_id=user_id).first()
 
     if not company:
         return jsonify({"message": "Company profile not found"}), 404
 
     data = request.get_json()
+
+    # 🔎 CHECK FOR DUPLICATE
+    existing_job = Job.query.filter_by(
+        company_id=company.id,
+        title=data.get("title"),
+        location=data.get("location")
+    ).first()
+
+    if existing_job:
+        return jsonify({"message": "Duplicate job already posted"}), 400
 
     new_job = Job(
         company_id=company.id,
@@ -452,8 +472,7 @@ def post_job():
 @app.route("/company/my_jobs", methods=["GET"])
 @jwt_required()
 def get_my_jobs():
-    user_id = get_jwt_identity() #2
-    print(user_id)
+    user_id = get_jwt_identity()
     company = CompanyProfile.query.filter_by(user_id=user_id).first()
 
     if not company:
@@ -462,7 +481,6 @@ def get_my_jobs():
     jobs = Job.query.filter_by(company_id=company.id).all()
 
     job_list = []
-    print(job_list)
 
     for job in jobs:
         job_list.append({
@@ -474,10 +492,17 @@ def get_my_jobs():
             "location": job.location,
             "job_type": job.job_type,
             "posted_at": job.posted_at,
-            "is_close": job.is_closed
+            "is_approved": job.is_approved,   # ✅ add this
+            "is_closed": job.is_closed        # ✅ rename properly
         })
 
     return jsonify(job_list)
+
+
+
+
+
+
 
 @app.route("/company/open_job/<int:job_id>", methods=["POST"])
 @jwt_required()
@@ -495,13 +520,76 @@ def open_job(job_id):
         return jsonify({"message": "Job not found"}), 404
 
     # already open
-    if job.is_close == False:
+    if job.is_closed == False:
         return jsonify({"message": "Job already open"}), 400
 
-    job.is_close = False   # ✅ FIX HERE
+    job.is_closed = False   # ✅ FIX HERE
     db.session.commit()
 
     return jsonify({"message": "Job reopened successfully"})
+
+
+
+
+
+@app.route("/admin/company_details/<int:company_id>", methods=["GET"])
+@jwt_required()
+def admin_company_details(company_id):
+
+    # 🔐 Admin check
+    claims = get_jwt()
+   
+
+    # 🔎 Get company profile
+    company = CompanyProfile.query.filter_by(id=company_id).first()
+    if not company:
+        return jsonify({"message": "Company not found"}), 404
+
+    # Get company user (email, block status etc.)
+    user = User.query.get(company.user_id)
+
+    # 📦 Company data
+    company_data = {
+        "id": company.id,
+        "company_name": company.company_name,
+        "email": user.email if user else None,
+        "industry": company.industry,
+        "website": company.website,
+        "location": company.location,
+        "company_size": company.company_size,
+        "is_blocked": not user.is_active if user else False,
+        "created_at": user.created_at.strftime("%Y-%m-%d") if user else None
+    }
+
+    # 📄 Jobs of this company
+    jobs = Job.query.filter_by(company_id=company.id).all()
+
+    jobs_data = []
+    for job in jobs:
+        jobs_data.append({
+            "id": job.id,
+            "title": job.title,
+            "description": job.description,
+            "salary": job.salary,
+            "applications_count": len(job.applications),
+            "is_blacklisted": job.is_blacklisted,
+            "is_closed": job.is_closed,
+            "is_approved": job.is_approved
+        })
+
+    return jsonify({
+        "company": company_data,
+        "jobs": jobs_data
+    }), 200
+
+
+
+
+
+
+
+
+
 
 @app.route("/company/close_job/<int:job_id>", methods=["POST"])
 @jwt_required()
@@ -521,10 +609,10 @@ def close_job(job_id):
         return jsonify({"message": "Job not found"}), 404
 
     # already closed
-    if job.is_close == True:
+    if job.is_closed == True:
         return jsonify({"message": "Job already closed"}), 400
 
-    job.is_close = True
+    job.is_closed = True
     db.session.commit()
 
     return jsonify({"message": "Job closed successfully"})
@@ -1173,7 +1261,153 @@ def toggle_job_block(job_id):
         }), 200
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500     
+        return jsonify({"error": str(e)}), 500   
+
+
+
+# ---------------- BLOCK / UNBLOCK STUDENT ----------------
+@app.route("/admin/toggle_student_block/<int:user_id>", methods=["POST"])
+@jwt_required()
+def toggle_student_block(user_id):
+
+    current_user_id = get_jwt_identity()
+    admin = User.query.get(current_user_id)
+
+    # ✅ Only admin allowed
+    if admin.role != "admin":
+        return jsonify({"message": "Unauthorized"}), 403
+
+    user = User.query.get(user_id)
+
+    if not user or user.role != "student":
+        return jsonify({"message": "Student not found"}), 404
+
+    # 🔥 toggle is_active
+    user.is_active = not user.is_active
+    db.session.commit()
+
+    return jsonify({
+        "message": "Student status updated",
+        "is_active": user.is_active
+    })  
+
+# ---------------- ADMIN VIEW JOB DETAIL ----------------
+@app.route("/admin/job/<int:job_id>", methods=["GET"])
+@jwt_required()
+def admin_job_detail(job_id):
+
+    current_user_id = get_jwt_identity()
+    admin = User.query.get(current_user_id)
+
+    if admin.role != "admin":
+        return jsonify({"message": "Unauthorized"}), 403
+
+    job = Job.query.get(job_id)
+
+    if not job:
+        return jsonify({"message": "Job not found"}), 404
+
+    company = job.company
+    user = company.user
+
+    return jsonify({
+        "job": {
+            "id": job.id,
+            "title": job.title,
+            "description": job.description,
+            "skills": job.skills,
+            "experience": job.experience,
+            "salary": job.salary,
+            "benefits": job.benefits,
+            "location": job.location,
+            "job_type": job.job_type,
+            "is_approved": job.is_approved,
+            "is_closed": job.is_closed,
+            "is_blacklisted": job.is_blacklisted,
+            "posted_at": job.posted_at
+        },
+        "company": {
+            "company_name": company.company_name,
+            "industry": company.industry,
+            "website": company.website,
+            "location": company.location,
+            "company_size": company.company_size,
+            "email": user.email,
+            "phone": user.phone,
+            "is_active": user.is_active
+        }
+    })
+
+# ---------------- SEARCH STUDENTS ----------------
+@app.route("/admin/search_students")
+@jwt_required()
+def search_students():
+
+    current_user_id = get_jwt_identity()
+    admin = User.query.get(current_user_id)
+
+    if admin.role != "admin":
+        return jsonify({"message": "Unauthorized"}), 403
+
+    query = request.args.get("q", "")
+
+    students = (
+        db.session.query(StudentProfile)
+        .join(User)
+        .filter(
+            (User.name.ilike(f"%{query}%")) |
+            (User.email.ilike(f"%{query}%")) |
+            (User.phone.ilike(f"%{query}%")) |
+            (User.id.cast(db.String).ilike(f"%{query}%"))
+        )
+        .all()
+    )
+
+    result = []
+    for s in students:
+        result.append({
+            "id": s.id,
+            "user_id": s.user.id,
+            "name": s.user.name,
+            "applications": len(s.applications),
+            "is_active": s.user.is_active
+        })
+
+    return jsonify(result)
+
+# ---------------- SEARCH COMPANIES ----------------
+@app.route("/admin/search_companies")
+@jwt_required()
+def search_companies():
+
+    current_user_id = get_jwt_identity()
+    admin = User.query.get(current_user_id)
+
+    if admin.role != "admin":
+        return jsonify({"message": "Unauthorized"}), 403
+
+    query = request.args.get("q", "")
+
+    companies = (
+        CompanyProfile.query
+        .filter(
+            (CompanyProfile.company_name.ilike(f"%{query}%")) |
+            (CompanyProfile.industry.ilike(f"%{query}%"))
+        )
+        .all()
+    )
+
+    result = []
+    for c in companies:
+        result.append({
+            "id": c.id,
+            "company_name": c.company_name,
+            "industry": c.industry,
+            "jobs_count": len(c.jobs),
+            "is_blocked": not c.user.is_active
+        })
+
+    return jsonify(result)
 if __name__== "__main__":
     with app.app_context():
         
